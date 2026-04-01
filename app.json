@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "ExoticFriends",
+    "slug": "exotic-friends",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./client/assets/images/icon.png",
+    "scheme": "exoticfriends",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./client/assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B3D2E"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.exoticfriends"
+    },
+    "android": {
+      "package": "com.exoticfriends",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B3D2E",
+        "foregroundImage": "./client/assets/images/icon.png"
+      }
+    },
+    "web": {
+      "favicon": "./client/assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "root": "client/app",
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

@@ -3,6 +3,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "strict": true,
+    "jsx": "react-native",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [
         "./client/*"
@@ -17,5 +22,8 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }
