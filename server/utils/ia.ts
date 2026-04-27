@@ -3,7 +3,7 @@
  *
  * Módulo 2 — Sistemas Inteligentes:
  *
- * 2.1.5 / 2.1.6 — Servicio cognitivo externo (Qwen 3.2b):
+ * 2.1.5 / 2.1.6 — Servicio cognitivo externo (Groq Llama 3.1-8b-instant):
  *   `consultarGroq` envía un prompt al LLM y devuelve la respuesta en texto.
  *
  * 2.1.7 / 2.1.9 — Sistema experto local (árbol de decisión):
@@ -164,7 +164,7 @@ export function analizarAlimentacion(registros: { fecha: string }[]) {
 /**
  * Cliente HTTP para la API de Groq (Servicio Cognitivo Externo).
  *
- * Modelo: Qwen 3.2b (Meta — código abierto).
+ * Modelo: Llama 3.1-8b-instant (Meta — código abierto).
  * Temperatura 0.3 — reduce aleatoriedad para respuestas JSON consistentes.
  * Max tokens 1200 — suficiente para el JSON de análisis/cuidados.
  *
@@ -177,13 +177,13 @@ export async function consultarGroq(prompt: string): Promise<string> {
   if (!apiKey) throw new Error("GROQ_API_KEY no configurada");
 
   const body = JSON.stringify({
-    model: "qwen/qwen3-32b",
+    model: "llama-3.1-8b-instant",
     messages: [
       {
         role: "system",
         content:
           "Eres un experto veterinario especializado en mascotas exóticas. " +
-          "Revisa informacion oficial de la especie y cuidados específicos. " +
+          "Revisa informacion oficial de la especie y cuidados. " +
           "Responde SIEMPRE en español y en formato JSON válido. " +
           "Sin texto extra fuera del JSON. Sin bloques markdown.",
       },
