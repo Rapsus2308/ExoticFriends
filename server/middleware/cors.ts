@@ -1,16 +1,15 @@
 /**
  * @fileoverview Middleware de CORS para ExoticFriends
  *
- * Acepta peticiones de tres fuentes:
- *   1. Dominios de Replit (desarrollo en Replit) — REPLIT_DEV_DOMAIN, REPLIT_DOMAINS
- *   2. Orígenes de producción personalizados   — ALLOWED_ORIGINS (CSV)
- *   3. localhost (desarrollo local / simulador) — siempre permitido
+ * Acepta peticiones de dos fuentes:
+ *   1. Orígenes de producción personalizados — ALLOWED_ORIGINS (CSV)
+ *   2. localhost (desarrollo local / simulador) — siempre permitido
  *
  * Nota: Las apps nativas (iOS/Android) NO envían cabecera Origin,
  * por lo que CORS no las bloquea. Solo es relevante para la versión web.
  *
- * Para producción en tu servidor, establece:
- *   ALLOWED_ORIGINS=https://tu-dominio.com,https://www.tu-dominio.com
+ * Para producción (Render), establece:
+ *   ALLOWED_ORIGINS=https://exoticfriends.onrender.com
  */
 
 import type { Application, Request, Response, NextFunction } from "express";
@@ -21,18 +20,8 @@ import type { Application, Request, Response, NextFunction } from "express";
 function buildAllowedOrigins(): Set<string> {
   const origins = new Set<string>();
 
-  // Entorno Replit (desarrollo)
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
-  }
-  if (process.env.REPLIT_DOMAINS) {
-    process.env.REPLIT_DOMAINS.split(",").forEach((d) =>
-      origins.add(`https://${d.trim()}`)
-    );
-  }
-
-  // Producción: dominio(s) propios separados por coma
-  // Ejemplo: ALLOWED_ORIGINS=https://exoticfriends.com,https://www.exoticfriends.com
+  // Producción (Render): dominio(s) propios separados por coma
+  // Ejemplo: ALLOWED_ORIGINS=https://exoticfriends.onrender.com
   if (process.env.ALLOWED_ORIGINS) {
     process.env.ALLOWED_ORIGINS.split(",").forEach((o) =>
       origins.add(o.trim())

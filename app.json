@@ -32,7 +32,7 @@
         "expo-router",
         {
           "root": "client/app",
-          "origin": "https://replit.com/"
+          "origin": "https://exoticfriends.onrender.com"
         }
       ],
       "expo-font",
@@ -45,7 +45,7 @@
     "extra": {
       "router": {
         "root": "client/app",
-        "origin": "https://replit.com/"
+        "origin": "https://exoticfriends.onrender.com"
       },
       "eas": {
         "projectId": "0f6a65b7-98ea-4139-9cbe-97ee0be961fc"

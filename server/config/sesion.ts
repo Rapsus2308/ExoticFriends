@@ -27,7 +27,7 @@ export function crearMiddlewareSesion() {
     cookie: {
       // En producción (NODE_ENV=production) el backend corre detrás de Nginx/HTTPS.
       // Express confía en el proxy (trust proxy: 1) y activa cookies seguras.
-      // En desarrollo se deja false porque el proxy de Replit ya maneja el TLS.
+      // En desarrollo se deja false porque no hay TLS en localhost.
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: 30 * 24 * 60 * 60 * 1000,
