@@ -6,22 +6,34 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
  * @returns {string} The API base URL
  */
 export function getApiUrl(): string {
-  const host = process.env.EXPO_PUBLIC_DOMAIN;
-
-  if (!host) {
-    throw new Error("EXPO_PUBLIC_DOMAIN is not set");
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (apiUrl) {
+    const withProtocol = /^https?:\/\//i.test(apiUrl)
+      ? apiUrl
+      : `https://${apiUrl}`;
+    const url = new URL(withProtocol);
+    return url.href.endsWith("/") ? url.href.slice(0, -1) : url.href;
   }
 
+  const host = process.env.EXPO_PUBLIC_DOMAIN?.trim();
+
+  if (!host) {
+    throw new Error(
+      "Set EXPO_PUBLIC_API_URL or EXPO_PUBLIC_DOMAIN for API requests"
+    );
+  }
+
+  const normalizedHost = host.replace(/^https?:\/\//i, "");
+
   const isLocal =
-    host.startsWith("localhost") ||
-    host.startsWith("127.0.0.1") ||
-    host.startsWith("192.168.") ||
-    
-    host.startsWith("10.");
+    normalizedHost.startsWith("localhost") ||
+    normalizedHost.startsWith("127.0.0.1") ||
+    normalizedHost.startsWith("192.168.") ||
+    normalizedHost.startsWith("10.");
 
   const protocol = isLocal ? "http" : "https";
 
-  const url = new URL(`${protocol}://${host}`);
+  const url = new URL(`${protocol}://${normalizedHost}`);
   return url.href.endsWith("/") ? url.href.slice(0, -1) : url.href;
 }
 
