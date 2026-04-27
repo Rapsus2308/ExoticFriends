@@ -96,7 +96,7 @@ ExoticFriends permite a los dueños de mascotas exóticas:
 │   ├── config/sesion.ts       # Configuración de sesiones PgStore
 │   ├── middleware/
 │   │   ├── auth.ts            # requireAuth — protege rutas privadas
-│   │   ├── cors.ts            # CORS dinámico (Replit + ALLOWED_ORIGINS)
+│   │   ├── cors.ts            # CORS dinámico (ALLOWED_ORIGINS + localhost)
 │   │   ├── logging.ts         # Log de peticiones /api
 │   │   ├── rateLimiting.ts    # limitadorApi (200 req/15 min) + limitadorAuth (20/15 min)
 │   │   └── expo.ts            # Archivos estáticos Expo + landing page
@@ -175,7 +175,7 @@ Abre `http://localhost:8081` en el navegador, o escanea el QR con **Expo Go** de
 |---|---|---|
 | `EXPO_PUBLIC_DOMAIN` | Dominio del backend (sin protocolo) | `api.tu-dominio.com` |
 
-En desarrollo con Replit, `EXPO_PUBLIC_DOMAIN` se inyecta automáticamente como `$REPLIT_DEV_DOMAIN:5000`.
+En desarrollo local, `EXPO_PUBLIC_DOMAIN` se establece como `localhost:5000` al correr `npm run expo:dev`.
 
 ---
 
@@ -315,7 +315,7 @@ ExoticFriends implementa un modelo cliente-servidor distribuido entre dos nodos 
 ┌──────────────────────────────┐        HTTP/HTTPS         ┌───────────────────────────────┐
 │  Cliente (Expo / React Native)│ ◄──────────────────────► │  Servidor API (Express / Node) │
 │  Puerto 8081                  │     JSON + Cookies        │  Puerto 5000                   │
-│  Dispositivo del usuario       │                          │  Replit / VPS                  │
+│  Dispositivo del usuario       │                          │  Render (producción)           │
 └──────────────────────────────┘                           └──────────────┬────────────────┘
                                                                           │ SQL (TLS)
                                                                           ▼
@@ -325,7 +325,7 @@ ExoticFriends implementa un modelo cliente-servidor distribuido entre dos nodos 
                                                            └──────────────────────────────┘
 ```
 
-El sistema involucra **tres nodos físicamente separados**: el dispositivo del usuario (cliente), el servidor Express en Replit/VPS, y la base de datos PostgreSQL en Neon. Cada nodo puede estar en una red o región geográfica distinta.
+El sistema involucra **tres nodos físicamente separados**: el dispositivo del usuario (cliente), el servidor Express en Render, y la base de datos PostgreSQL en Neon. Cada nodo puede estar en una red o región geográfica distinta.
 
 ### Protocolos involucrados
 
@@ -408,4 +408,4 @@ Historial alimentación → Árbol decisión → alertas locales
 
 ## Build para producción
 
-Ver el archivo **`DEPLOY.md`** para instrucciones detalladas de despliegue de base de datos, servidor y app móvil.
+Ver **[DEPLOY.md](DEPLOY.md)** para instrucciones detalladas de despliegue de base de datos, servidor y app móvil.

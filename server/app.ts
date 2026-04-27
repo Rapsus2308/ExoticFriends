@@ -47,7 +47,7 @@ declare module "express-session" {
 export function crearApp(): express.Application {
   const app = express();
 
-  // Confiar en el primer proxy inverso (Nginx, Replit, etc.).
+  // Confiar en el primer proxy inverso (Nginx, Render, etc.).
   // Necesario para que req.protocol sea "https" y las cookies seguras funcionen.
   app.set("trust proxy", 1);
 
