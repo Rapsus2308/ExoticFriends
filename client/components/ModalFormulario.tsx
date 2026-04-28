@@ -1,7 +1,8 @@
-import { StyleSheet, Text, View, Modal, Pressable, ScrollView, Platform, KeyboardAvoidingView, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, Modal, Pressable, Platform, Dimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 interface PropsModalFormulario {
   visible: boolean;
@@ -17,38 +18,30 @@ export default function ModalFormulario({ visible, titulo, alCerrar, children }:
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen">
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent presentationStyle="overFullScreen">
       <View style={estilos.overlay}>
         <Pressable style={estilos.fondo} onPress={alCerrar} />
-        <KeyboardAvoidingView
-          style={estilos.keyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
-        >
-          <View style={[estilos.contenedor, { paddingBottom: insets.bottom + 16, maxHeight: ALTO_PANTALLA * 0.9 }]}>
-            <View style={estilos.tiradorContenedor}>
-              <View style={estilos.tirador} />
-            </View>
-            <View style={estilos.encabezado}>
-              <Text style={estilos.titulo}>{titulo}</Text>
-              <Pressable onPress={alCerrar} hitSlop={12}>
-                <Feather name="x" size={24} color={Colors.colores.texto} />
-              </Pressable>
-            </View>
-            <ScrollView
-              style={estilos.scroll}
-              contentContainerStyle={estilos.scrollContenido}
-              showsVerticalScrollIndicator={true}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="interactive"
-              bounces={true}
-              nestedScrollEnabled={true}
-            >
-              {children}
-              <View style={{ height: 20 }} />
-            </ScrollView>
+        <View style={[estilos.contenedor, { paddingBottom: insets.bottom + 16, maxHeight: ALTO_PANTALLA * 0.9 }]}>
+          <View style={estilos.tiradorContenedor}>
+            <View style={estilos.tirador} />
           </View>
-        </KeyboardAvoidingView>
+          <View style={estilos.encabezado}>
+            <Text style={estilos.titulo}>{titulo}</Text>
+            <Pressable onPress={alCerrar} hitSlop={12}>
+              <Feather name="x" size={24} color={Colors.colores.texto} />
+            </Pressable>
+          </View>
+          <KeyboardAwareScrollViewCompat
+            style={estilos.scroll}
+            contentContainerStyle={estilos.scrollContenido}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            bottomOffset={Platform.OS === 'ios' ? 20 : 40}
+          >
+            {children}
+            <View style={{ height: 20 }} />
+          </KeyboardAwareScrollViewCompat>
+        </View>
       </View>
     </Modal>
   );
@@ -62,9 +55,6 @@ const estilos = StyleSheet.create({
   fondo: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  keyboardView: {
-    justifyContent: 'flex-end',
   },
   contenedor: {
     backgroundColor: Colors.colores.fondo,
