@@ -7,7 +7,18 @@
       "env": {
           "EXPO_PUBLIC_DOMAIN": "exoticfriends.onrender.com",
           "EXPO_PUBLIC_API_URL": "https://exoticfriends.onrender.com"
-      }
+      } 
+    },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+          "EXPO_PUBLIC_DOMAIN": "exoticfriends.onrender.com",
+          "EXPO_PUBLIC_API_URL": "https://exoticfriends.onrender.com"
+      } 
     }
   }
 }
