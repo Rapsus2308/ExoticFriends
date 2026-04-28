@@ -14,29 +14,43 @@ import { requireAuth } from "../middleware/auth";
 
 const router = Router({ mergeParams: true });
 
+function normalizarMascotaId(params: Request["params"]): string | null {
+  const raw = params.mascotaId;
+  const mascotaId = Array.isArray(raw) ? raw[0] : raw;
+  return typeof mascotaId === "string" && mascotaId.trim().length > 0
+    ? mascotaId
+    : null;
+}
+
 /** GET /api/mascotas/:mascotaId/pesos — Lista pesos de una mascota */
 router.get("/", requireAuth, async (req: Request, res: Response) => {
+  const mascotaId = normalizarMascotaId(req.params);
+  if (!mascotaId) return res.status(400).json({ message: "mascotaId inválido" });
+
   const mascota = await storage.obtenerMascotaPorId(
-    req.params.mascotaId,
+    mascotaId,
     req.session.perfilId!
   );
   if (!mascota) return res.status(404).json({ message: "Mascota no encontrada" });
-  const pesos = await storage.obtenerPesosPorMascota(req.params.mascotaId);
+  const pesos = await storage.obtenerPesosPorMascota(mascotaId);
   return res.json(pesos);
 });
 
 /** POST /api/mascotas/:mascotaId/pesos — Agrega un registro de peso */
 router.post("/", requireAuth, async (req: Request, res: Response) => {
   try {
+    const mascotaId = normalizarMascotaId(req.params);
+    if (!mascotaId) return res.status(400).json({ message: "mascotaId inválido" });
+
     const mascota = await storage.obtenerMascotaPorId(
-      req.params.mascotaId,
+      mascotaId,
       req.session.perfilId!
     );
     if (!mascota) return res.status(404).json({ message: "Mascota no encontrada" });
 
     const datos = crearPesoSchema.parse(req.body);
     const registro = await storage.agregarPeso({
-      mascotaId: req.params.mascotaId,
+      mascotaId,
       peso: datos.peso,
       unidad: datos.unidad,
       fecha: datos.fecha,

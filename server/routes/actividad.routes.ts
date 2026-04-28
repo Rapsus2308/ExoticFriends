@@ -15,6 +15,12 @@ import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
+function normalizarRegistroId(params: Request["params"]): string | null {
+  const raw = params.id;
+  const id = Array.isArray(raw) ? raw[0] : raw;
+  return typeof id === "string" && id.trim().length > 0 ? id : null;
+}
+
 /** GET /api/todos-pesos — Todos los pesos del perfil agrupados */
 router.get("/todos-pesos", requireAuth, async (req: Request, res: Response) => {
   const pesos = await storage.obtenerTodosPesosPerfil(req.session.perfilId!);
@@ -35,19 +41,25 @@ router.get("/toda-salud", requireAuth, async (req: Request, res: Response) => {
 
 /** DELETE /api/pesos/:id — Elimina un registro de peso */
 router.delete("/pesos/:id", requireAuth, async (req: Request, res: Response) => {
-  await storage.eliminarPeso(req.params.id);
+  const id = normalizarRegistroId(req.params);
+  if (!id) return res.status(400).json({ message: "id inválido" });
+  await storage.eliminarPeso(id);
   return res.json({ message: "Registro eliminado" });
 });
 
 /** DELETE /api/alimentacion/:id — Elimina un registro de alimentación */
 router.delete("/alimentacion/:id", requireAuth, async (req: Request, res: Response) => {
-  await storage.eliminarAlimentacionDb(req.params.id);
+  const id = normalizarRegistroId(req.params);
+  if (!id) return res.status(400).json({ message: "id inválido" });
+  await storage.eliminarAlimentacionDb(id);
   return res.json({ message: "Registro eliminado" });
 });
 
 /** DELETE /api/salud/:id — Elimina una nota de salud */
 router.delete("/salud/:id", requireAuth, async (req: Request, res: Response) => {
-  await storage.eliminarSaludDb(req.params.id);
+  const id = normalizarRegistroId(req.params);
+  if (!id) return res.status(400).json({ message: "id inválido" });
+  await storage.eliminarSaludDb(id);
   return res.json({ message: "Registro eliminado" });
 });
 

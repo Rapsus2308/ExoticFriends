@@ -30,7 +30,7 @@ ExoticFriends permite a los dueños de mascotas exóticas:
 - Registrar **alimentación** diaria (alimento, cantidad, notas) con gráfico de frecuencia (últimos 14 días)
 - Anotar **notas de salud** (revisión, veterinario, medicamento, observación)
 - Buscar y filtrar mascotas por nombre, especie o categoría
-- Consultar un **Asistente IA** que analiza el estado de salud de cada mascota usando regresión lineal OLS, árbol de decisión y el modelo Llama 3.1 de Groq
+- Consultar un **Asistente IA** que analiza el estado de salud de cada mascota usando regresión lineal OLS, árbol de decisión y el modelo Llama 3.3 70B de Groq
 - Ver la **actividad global** del perfil (todos los registros de todas las mascotas)
 - Gestionar la **cuenta**: editar nombre y email, cambiar contraseña y eliminar la cuenta
 
@@ -46,7 +46,7 @@ ExoticFriends permite a los dueños de mascotas exóticas:
 | Base de datos | PostgreSQL (Neon) + Drizzle ORM |
 | Autenticación | express-session + bcryptjs + connect-pg-simple |
 | Seguridad | Helmet (cabeceras HTTP) + express-rate-limit (200 req/15 min) |
-| IA | Groq API — modelo `llama-3.1-8b-instant` |
+| IA | Groq API — modelo `llama-3.3-70b-versatile` |
 | Fuentes | Nunito (Google Fonts via expo-google-fonts) |
 
 ---
@@ -191,7 +191,7 @@ Esquema definido en `shared/schema.ts` con Drizzle ORM:
 | `registros_alimentacion` | Historial de alimentación por mascota |
 | `notas_salud` | Notas clínicas (revisión, veterinario, medicamento, observación) |
 | `analisis_ia` | Caché de análisis IA por mascota (alertas, puntuación, regresión) |
-| `cuidados_especie` | Caché de guías de cuidados por especie (compartida entre mascotas) |
+| `cuidados_especie` | Caché de guías de cuidados por mascota (personalizada con morfo/genética) |
 
 ### Migraciones
 
@@ -358,7 +358,7 @@ El servidor Express maneja peticiones de forma **concurrente** gracias al event 
 
 ### Arquitectura del módulo inteligente
 
-El análisis de salud combina tres técnicas:
+El análisis de salud combina **cinco fuentes de datos** y **tres técnicas de procesamiento**:
 
 **1. Regresión Lineal Simple (OLS) — `server/utils/ia.ts`**
 
@@ -381,28 +381,75 @@ Evalúa frecuencia de alimentación y días sin registro para generar alertas ca
 
 **3. LLM externo — Groq API**
 
-Modelo `llama-3.1-8b-instant` (Meta Llama 3.1), temperatura 0.3, max_tokens 1200. Recibe un prompt enriquecido con los resultados de OLS y el árbol de decisión para generar:
+Modelo `llama-3.3-70b-versatile` (Meta Llama 3.3, 70B parámetros), temperatura 0.3, max_tokens 1200. Recibe un prompt enriquecido con todas las fuentes de datos para generar:
 
 - Resumen de salud narrativo
 - Lista de alertas priorizadas
 - Puntuación de salud (0–100)
 
+### Fuentes de datos del análisis
+
+El pipeline de análisis (`POST /api/mascotas/:id/analizar`) recopila y cruza cinco fuentes de información antes de consultar al LLM:
+
+| # | Fuente | Origen | Datos que aporta |
+|---|---|---|---|
+| 1 | **Perfil de la mascota** | Tabla `mascotas` | Especie, categoría, género, fecha de nacimiento, edad calculada (días/meses), etapa de vida (cría/juvenil/adulto/senior) |
+| 2 | **Notas del dueño** | Campo `notas` de la mascota | Información libre como genética/morfo (GIANT, RAPTOR, SNOW, PIED, etc.), condiciones especiales o historial previo |
+| 3 | **Historial de peso** | Tabla `registros_peso` | Peso actual, tendencia OLS (pendiente g/día, R²), predicción a 7 días |
+| 4 | **Historial de alimentación** | Tabla `registros_alimentacion` | Registros últimos 7 y 30 días, días con alimento por semana, días sin registro |
+| 5 | **Notas de salud** | Tabla `notas_salud` | Últimas 10 notas: visitas al veterinario, medicamentos, revisiones y observaciones (tipo, fecha, título, descripción) |
+| 6 | **Parámetros de referencia** | Tabla `cuidados_especie` (caché IA por mascota) | Rango de peso saludable, peso crítico bajo/alto, frecuencia de alimentación recomendada, alimentos recomendados/a evitar, frecuencia de chequeo veterinario |
+
+### Comparación contra parámetros de referencia
+
+El análisis no solo describe el estado actual, sino que **compara los datos reales contra los parámetros de la especie**:
+
+- Si el peso actual está fuera del rango saludable de la especie → alerta de peso
+- Si la frecuencia de alimentación registrada no coincide con la recomendada → alerta de alimentación
+- Si hay medicamentos activos o visitas veterinarias recientes → se consideran en la evaluación
+- Si las notas del dueño mencionan un morfo genético (ej: gecko GIANT), el LLM ajusta los rangos de peso y cuidados al morfo específico
+
+Los parámetros de referencia se obtienen de la tabla `cuidados_especie`, que se genera la primera vez que el usuario consulta la sección de cuidados. Cada mascota tiene su propia guía personalizada (indexada por `mascotaId`), lo que permite que morfos genéticos (GIANT, RAPTOR, SNOW, etc.) mencionados en las notas influyan en los rangos de peso y cuidados.
+
 ### Pipeline de análisis
 
 ```
-Historial de pesos → OLS → pendiente + R²
-                                        ↓
-Historial alimentación → Árbol decisión → alertas locales
-                                        ↓
-                               Prompt → Groq LLM → JSON estructurado
-                                        ↓
-                               Guardar en tabla analisis_ia
+Perfil mascota (especie, género, edad, notas/morfo)
+                    ↓
+Historial de pesos → OLS → pendiente + R² + predicción
+                    ↓
+Historial alimentación → Árbol decisión → estadísticas
+                    ↓
+Notas de salud → últimas 10 (veterinario, medicamentos, observaciones)
+                    ↓
+Parámetros de referencia → cuidados_especie (rango peso, dieta, chequeos)
+                    ↓
+       ¿Notas de salud más recientes que el caché de cuidados?
+           Sí → Auto-regenerar cuidados con datos del veterinario
+           No → Usar caché existente
+                    ↓
+           Prompt enriquecido → Groq LLM (Llama 3.3 70B) → JSON estructurado
+                    ↓
+           Guardar en tabla analisis_ia (historial clínico)
 ```
+
+### Guía de cuidados por especie
+
+El endpoint `GET /api/mascotas/:id/cuidados` genera una guía personalizada **única por mascota**, considerando especie, género, etapa de vida, notas del dueño (morfo/genética) y notas de salud (historial veterinario). El prompt incluye 10 reglas estrictas:
+
+1. Precisión taxonómica — no inventa nombres científicos
+2. Respeta el tipo de dieta real (insectívora, herbívora, omnívora, etc.)
+3. Alimentos en español con proporciones/cantidades recomendadas
+4. Rangos de peso apropiados para la edad y género
+5. Si la especie es ambigua, marca baja confianza
+6. Ajusta recomendaciones a la etapa de vida (cría, juvenil, adulto, senior)
+7. Si las notas del dueño mencionan morfo genético (GIANT, RAPTOR, SNOW, PIED), ajusta rangos de peso y cuidados al morfo específico
+8. Si las notas veterinarias incluyen rangos de peso proporcionados por un profesional, esos rangos tienen prioridad sobre los genéricos de la especie
 
 ### Caché inteligente
 
-- **`analisis_ia`**: Cada análisis generado se guarda. El frontend lo carga instantáneamente sin llamar a Groq. Si tiene más de 7 días, muestra badge "Desactualizado".
-- **`cuidados_especie`**: La guía de cuidados se genera una vez por especie y se comparte entre todas las mascotas de esa especie. Caché de 15 días.
+- **`analisis_ia`**: Cada análisis generado se guarda con fecha. El frontend lo carga instantáneamente sin llamar a Groq. Si tiene más de 7 días, muestra badge "Desactualizado".
+- **`cuidados_especie`**: La guía de cuidados se genera una vez por mascota (indexada por `mascotaId`), personalizada según especie, género, edad, morfo/genética y notas veterinarias. Caché de 15 días. **Se invalida automáticamente** si hay notas de salud más recientes que la última generación (ej: el veterinario reporta un rango de peso diferente para el morfo). Soporta `?force=true` para regenerar manualmente. Se elimina automáticamente al borrar la mascota (`ON DELETE CASCADE`). El endpoint `POST /analizar` también auto-regenera los cuidados si detecta notas más recientes, garantizando que el análisis siempre use parámetros actualizados.
 
 ---
 

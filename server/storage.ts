@@ -1,4 +1,4 @@
-import { eq, and, desc, or } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db } from "./db";
 import {
   perfiles, mascotas, registrosPeso, registrosAlimentacion, notasSalud,
@@ -249,120 +249,122 @@ export async function guardarCuidadosEnUltimoAnalisis(
 }
 
 // ============================================================
-// CUIDADOS POR ESPECIE — caché global con expiración de 15 días
+// CUIDADOS POR MASCOTA — caché con expiración de 15 días
 // ============================================================
 
-/** Días de vigencia del caché de cuidados por especie */
+/** Días de vigencia del caché de cuidados */
 const DIAS_VIGENCIA_CUIDADOS = 15;
 
 /**
- * Busca una fila de cuidados en la tabla por nombre común O nombre
- * científico (búsqueda insensible a mayúsculas).
+ * Devuelve la fecha de generación de los cuidados de una mascota.
+ * Se usa para comparar contra las notas de salud y decidir si regenerar.
  *
- * Buscar en ambas columnas evita crear duplicados cuando el usuario
- * registra la misma especie con nombre diferente (ej: "gecko leopardo"
- * vs "Eublepharis macularius").
- *
- * @param termino - Nombre común o científico de la especie
- * @returns Fila completa de la tabla o null si no existe
+ * @param mascotaId - ID de la mascota
+ * @returns Fecha de generación o null si no existe
  */
-async function buscarFilaCuidados(
-  termino: string
-): Promise<typeof cuidadosEspecie.$inferSelect | null> {
-  const t = termino.toLowerCase().trim();
+export async function obtenerFechaCuidadosMascota(
+  mascotaId: string
+): Promise<Date | null> {
   const [fila] = await db
-    .select()
+    .select({ fechaGeneracion: cuidadosEspecie.fechaGeneracion })
     .from(cuidadosEspecie)
-    .where(
-      or(
-        eq(cuidadosEspecie.especie, t),
-        eq(cuidadosEspecie.nombreCientifico, t)
-      )
-    )
+    .where(eq(cuidadosEspecie.mascotaId, mascotaId))
     .limit(1);
-  return fila ?? null;
+  return fila ? new Date(fila.fechaGeneracion) : null;
 }
 
 /**
- * Devuelve la guía de cuidados de una especie desde la BD si está vigente.
+ * Devuelve la guía de cuidados de una mascota si está vigente.
  *
  * Lógica de caducidad:
  * - Si la fila existe y tiene < 15 días → devuelve los datos (caché válido)
- * - Si la fila existe y tiene ≥ 15 días → devuelve null (caché expirado,
- *   el endpoint debe regenerar llamando a Groq y luego actualizar la fila)
- * - Si no existe → devuelve null (primera vez para esta especie)
+ * - Si la fila existe y tiene ≥ 15 días → devuelve null (caché expirado)
+ * - Si no existe → devuelve null (primera vez para esta mascota)
  *
- * La búsqueda coincide con NOMBRE COMÚN o NOMBRE CIENTÍFICO para evitar
- * duplicados cuando distintos usuarios usan nomenclaturas distintas.
- *
- * @param especie - Nombre común o científico de la especie
+ * @param mascotaId - ID de la mascota
  * @returns Guía de cuidados parseada, o null si no existe/expiró
  */
-export async function obtenerCuidadosPorEspecie(
-  especie: string
+export async function obtenerCuidadosPorMascota(
+  mascotaId: string
 ): Promise<unknown | null> {
-  const fila = await buscarFilaCuidados(especie);
+  const [fila] = await db
+    .select()
+    .from(cuidadosEspecie)
+    .where(eq(cuidadosEspecie.mascotaId, mascotaId))
+    .limit(1);
   if (!fila) return null;
 
-  // Verificar si el caché sigue vigente (< DIAS_VIGENCIA_CUIDADOS días)
   const diasTranscurridos =
     (Date.now() - new Date(fila.fechaGeneracion).getTime()) /
     (1000 * 60 * 60 * 24);
   if (diasTranscurridos >= DIAS_VIGENCIA_CUIDADOS) {
-    return null; // Caché expirado — regenerar
+    return null;
   }
 
   return JSON.parse(fila.datos);
 }
 
 /**
- * Guarda o actualiza la guía de cuidados de una especie.
+ * Guarda o actualiza la guía de cuidados de una mascota.
  *
  * Estrategia de upsert:
- * 1. Busca la fila existente por nombre común O científico.
+ * 1. Busca la fila existente por mascotaId.
  * 2. Si existe → actualiza datos, nombre científico y fecha de generación.
  * 3. Si no existe → inserta nueva fila.
  *
- * La fecha de generación se renueva en cada guardado para reiniciar
- * el contador de caducidad de 15 días.
- *
- * @param especie - Nombre común de la especie (campo principal)
+ * @param mascotaId - ID de la mascota
+ * @param especie - Nombre común de la especie
  * @param categoria - Categoría de la mascota
+ * @param genero - Género de la mascota
+ * @param edadAproximada - Rango de edad aproximada
  * @param datos - Objeto de cuidados a serializar y guardar
  * @param nombreCientifico - Nombre científico (opcional, devuelto por Groq)
  */
-export async function guardarCuidadosEspecie(
+export async function guardarCuidadosMascota(
+  mascotaId: string,
   especie: string,
   categoria: string,
+  genero: string,
+  edadAproximada: string,
   datos: unknown,
   nombreCientifico?: string | null
 ): Promise<void> {
   const especieLower = especie.toLowerCase().trim();
+  const generoLower = genero.toLowerCase().trim();
+  const edadLower = edadAproximada.toLowerCase().trim();
   const cientificoLower = nombreCientifico
     ? nombreCientifico.toLowerCase().trim()
     : null;
   const datosJson = JSON.stringify(datos);
   const ahora = new Date();
 
-  // Buscar fila existente por cualquiera de los dos nombres
-  const existente = await buscarFilaCuidados(especie);
+  const [existente] = await db
+    .select()
+    .from(cuidadosEspecie)
+    .where(eq(cuidadosEspecie.mascotaId, mascotaId))
+    .limit(1);
 
   if (existente) {
-    // Actualizar fila existente — renovar datos, nombre científico y fecha
     await db
       .update(cuidadosEspecie)
       .set({
-        datos: datosJson,
+        especie: especieLower,
         nombreCientifico: cientificoLower ?? existente.nombreCientifico,
+        categoria,
+        genero: generoLower,
+        edadAproximada: edadLower,
+        datos: datosJson,
         fechaGeneracion: ahora,
       })
       .where(eq(cuidadosEspecie.id, existente.id));
   } else {
-    // Insertar nueva fila — primera vez que se genera para esta especie
     await db.insert(cuidadosEspecie).values({
+      mascotaId,
       especie: especieLower,
       nombreCientifico: cientificoLower,
       categoria,
+      genero: generoLower,
+      edadAproximada: edadLower,
       datos: datosJson,
     });
   }

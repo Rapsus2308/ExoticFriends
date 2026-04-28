@@ -32,12 +32,20 @@ router.get("/:id", requireAuth, async (req: Request, res: Response) => {
 /** POST /api/mascotas — Crea una nueva mascota */
 router.post("/", requireAuth, async (req: Request, res: Response) => {
   try {
-    const datos = crearMascotaSchema.parse(req.body);
+    const payload = {
+      ...req.body,
+      genero:
+        typeof req.body?.genero === "string"
+          ? req.body.genero.trim().toLowerCase()
+          : req.body?.genero,
+    };
+    const datos = crearMascotaSchema.parse(payload);
     const mascota = await storage.agregarMascota({
       perfilId: req.session.perfilId!,
       nombre: datos.nombre,
       especie: datos.especie,
       categoria: datos.categoria,
+      genero: datos.genero,
       fechaNacimiento: datos.fechaNacimiento,
       fotoBase64: datos.fotoBase64?.startsWith("data:") ? datos.fotoBase64 : null,
       notas: datos.notas || null,
@@ -57,7 +65,14 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
 router.put("/:id", requireAuth, async (req: Request, res: Response) => {
   try {
     // Validación parcial: todos los campos son opcionales en la edición
-    const datos = crearMascotaSchema.partial().parse(req.body);
+    const payload = {
+      ...req.body,
+      genero:
+        typeof req.body?.genero === "string"
+          ? req.body.genero.trim().toLowerCase()
+          : req.body?.genero,
+    };
+    const datos = crearMascotaSchema.partial().parse(payload);
     if (datos.fotoBase64 !== undefined && !datos.fotoBase64?.startsWith("data:")) {
       datos.fotoBase64 = null;
     }

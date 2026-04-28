@@ -11,13 +11,14 @@ app.get("/api/health", (_req, res) => {
 const server = createServer(app);
 
 const port = parseInt(process.env.PORT || "5000", 10);
+const host = process.env.SERVER_HOST || "0.0.0.0";
 
 server.listen(
   {
     port,
-    host: "0.0.0.0",
+    host,
   },
   () => {
-    console.log(`express server serving on http://0.0.0.0:${port}`);
+    console.log(`express server serving on http://${host}:${port}`);
   }
 );

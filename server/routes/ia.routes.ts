@@ -28,6 +28,53 @@ import {
 
 const router = Router({ mergeParams: true });
 
+function normalizarMascotaId(params: Request["params"]): string | null {
+  const raw = params.mascotaId;
+  const mascotaId = Array.isArray(raw) ? raw[0] : raw;
+  return typeof mascotaId === "string" && mascotaId.trim().length > 0
+    ? mascotaId
+    : null;
+}
+
+type EtapaVida = "cria" | "juvenil" | "adulto" | "senior" | "desconocida";
+
+function calcularEdadMascota(fechaNacimiento: string): {
+  edadDias: number | null;
+  edadMeses: number | null;
+  etapaVida: EtapaVida;
+} {
+  const tNacimiento = new Date(fechaNacimiento).getTime();
+  if (Number.isNaN(tNacimiento)) {
+    return { edadDias: null, edadMeses: null, etapaVida: "desconocida" };
+  }
+
+  const now = Date.now();
+  if (tNacimiento > now) {
+    return { edadDias: null, edadMeses: null, etapaVida: "desconocida" };
+  }
+
+  const edadDias = Math.floor((now - tNacimiento) / (1000 * 60 * 60 * 24));
+  const edadMeses = Math.floor(edadDias / 30.44);
+
+  let etapaVida: EtapaVida = "adulto";
+  if (edadMeses < 2) etapaVida = "cria";
+  else if (edadMeses < 12) etapaVida = "juvenil";
+  else if (edadMeses >= 84) etapaVida = "senior";
+
+  return { edadDias, edadMeses, etapaVida };
+}
+
+function obtenerRangoEdadAproximada(edadMeses: number | null): string {
+  if (edadMeses == null) return "desconocida";
+  if (edadMeses < 12) return "<1 año";
+  if (edadMeses < 24) return "1 año";
+  if (edadMeses < 36) return "2 años";
+  if (edadMeses < 48) return "3 años";
+  if (edadMeses < 60) return "4 años";
+  if (edadMeses < 72) return "5 años";
+  return ">5 años";
+}
+
 // ──────────────────────────────────────────────────────────────
 // GET /analisis — Carga el último análisis guardado (sin Groq)
 // ──────────────────────────────────────────────────────────────
@@ -41,13 +88,17 @@ const router = Router({ mergeParams: true });
  */
 router.get("/analisis", requireAuth, async (req: Request, res: Response) => {
   try {
+    const mascotaId = normalizarMascotaId(req.params);
+    if (!mascotaId) return res.status(400).json({ message: "mascotaId inválido" });
+
     const mascota = await storage.obtenerMascotaPorId(
-      req.params.mascotaId,
+      mascotaId,
       req.session.perfilId!
     );
     if (!mascota) return res.status(404).json({ message: "Mascota no encontrada" });
+    const edad = calcularEdadMascota(mascota.fechaNacimiento);
 
-    const ultimo = await storage.obtenerUltimoAnalisis(req.params.mascotaId);
+    const ultimo = await storage.obtenerUltimoAnalisis(mascotaId);
     if (!ultimo) return res.status(404).json({ message: "Sin análisis previo" });
 
     const diasDesdeGeneracion = Math.floor(
@@ -83,13 +134,16 @@ router.get("/analisis", requireAuth, async (req: Request, res: Response) => {
  */
 router.get("/historial-analisis", requireAuth, async (req: Request, res: Response) => {
   try {
+    const mascotaId = normalizarMascotaId(req.params);
+    if (!mascotaId) return res.status(400).json({ message: "mascotaId inválido" });
+
     const mascota = await storage.obtenerMascotaPorId(
-      req.params.mascotaId,
+      mascotaId,
       req.session.perfilId!
     );
     if (!mascota) return res.status(404).json({ message: "Mascota no encontrada" });
 
-    const historial = await storage.obtenerHistorialAnalisis(req.params.mascotaId);
+    const historial = await storage.obtenerHistorialAnalisis(mascotaId);
     return res.json(
       historial.map((a) => ({
         id: a.id,
@@ -113,40 +167,91 @@ router.get("/historial-analisis", requireAuth, async (req: Request, res: Respons
  * Devuelve la guía de cuidados de la especie de la mascota.
  *
  * Flujo de caché:
- *   1. Buscar por especie o nombre científico en tabla `cuidados_especie`.
+/**
+ * Devuelve la guía de cuidados personalizada para la mascota.
+ *
+ * Flujo de caché:
+ *   1. Buscar por mascotaId en tabla `cuidados_especie`.
  *      Si existe y tiene < 15 días → devolver inmediatamente (sin Groq).
- *   2. Si no existe o expiró → consultar Groq, guardar con nombre científico
- *      y devolver el resultado.
+ *   2. Si no existe o expiró → consultar Groq, guardar y devolver.
  *
  * @route GET /api/mascotas/:mascotaId/cuidados
  * @access Privado
  */
 router.get("/cuidados", requireAuth, async (req: Request, res: Response) => {
   try {
+    const mascotaId = normalizarMascotaId(req.params);
+    if (!mascotaId) return res.status(400).json({ message: "mascotaId inválido" });
+
     const mascota = await storage.obtenerMascotaPorId(
-      req.params.mascotaId,
+      mascotaId,
       req.session.perfilId!
     );
     if (!mascota) return res.status(404).json({ message: "Mascota no encontrada" });
+    const edad = calcularEdadMascota(mascota.fechaNacimiento);
+    const edadAproximada = obtenerRangoEdadAproximada(edad.edadMeses);
 
-    // 1. Caché por especie (15 días)
-    const cuidadosCache = await storage.obtenerCuidadosPorEspecie(mascota.especie);
-    if (cuidadosCache) return res.json(cuidadosCache);
+    // 1. Obtener notas de salud (se usan para verificar frescura del caché y para el prompt)
+    const salud = await storage.obtenerSaludPorMascota(mascotaId);
 
-    // 2. Solicitar a Groq incluyendo el nombre científico en el JSON de respuesta
+    // 2. Caché por mascota (15 días), con invalidación si hay notas más recientes.
+    const forceRefresh = req.query.force === "true";
+    if (!forceRefresh) {
+      const cacheFecha = await storage.obtenerFechaCuidadosMascota(mascotaId);
+      const cuidadosCache = await storage.obtenerCuidadosPorMascota(mascotaId);
+      // Invalidar caché si hay notas de salud más recientes que la última generación
+      const tieneNotasNuevas = cacheFecha && salud.length > 0 && salud.some(
+        (n) => new Date(n.fecha).getTime() > cacheFecha.getTime()
+      );
+      if (cuidadosCache && !tieneNotasNuevas) return res.json(cuidadosCache);
+    }
+
+    // 3. Construir contexto de notas de salud para el prompt
+    const contextoSalud = salud.length > 0
+      ? salud
+          .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+          .slice(0, 10)
+          .map((n) => `  · [${n.tipo}] ${n.fecha} — ${n.titulo}: ${n.descripcion}`)
+          .join("\n")
+      : "";
+
+    // 4. Solicitar a Groq con datos completos de la mascota + notas de salud
     const prompt =
-      `Eres experto veterinario en mascotas exóticas. Perfil de la mascota:\n` +
+      `Eres veterinario especializado en mascotas exóticas y taxonomía animal.\n` +
+      `Tu prioridad es precisión de especie y evitar inventar datos.\n` +
       `- Nombre: ${mascota.nombre}\n` +
       `- Especie: ${mascota.especie}\n` +
-      `- Categoría: ${mascota.categoria}\n\n` +
+      `- Categoría: ${mascota.categoria}\n` +
+      `- Género: ${mascota.genero}\n` +
+      `- Fecha nacimiento: ${mascota.fechaNacimiento}\n` +
+      `- Edad aproximada (rango): ${edadAproximada}\n` +
+      `- Edad estimada: ${edad.edadMeses ?? "desconocida"} meses (${edad.edadDias ?? "desconocida"} días)\n` +
+      `- Etapa de vida: ${edad.etapaVida}\n` +
+      `- Notas del dueño: ${mascota.notas?.trim() || "Sin notas"}\n` +
+      (contextoSalud
+        ? `\nHistorial de salud (notas veterinarias recientes):\n${contextoSalud}\n\n`
+        : "\n") +
+      `Reglas estrictas:\n` +
+      `1) Si el nombre de especie es ambiguo o insuficiente, indícalo en nombreCientifico como "desconocido".\n` +
+      `2) No inventes nombres científicos ni rangos fisiológicos.\n` +
+      `3) Ajusta recomendaciones al tipo real de animal según categoría, especie y etapa de vida.\n` +
+      `4) Alimentación y rango de peso deben ser apropiados para la edad del animal y su género.\n` +
+      `5) Si tienes duda, devuelve recomendaciones conservadoras y marca baja confianza.\n` +
+      `6) TODOS los textos deben estar en español. Nombres de alimentos en español (ej: "grillos" no "crickets").\n` +
+      `7) Los alimentos deben incluir proporción o cantidad recomendada (ej: "grillos — 3 a 5 diarios").\n` +
+      `8) Solo recomienda alimentos que la especie come en su dieta real. Si es insectívora, NO incluyas vegetales. Si es herbívora, NO incluyas insectos. Respeta el tipo de dieta (insectívora, herbívora, omnívora, carnívora, frugívora, nectarívora, etc.).\n` +
+      `9) Si las notas del dueño o las notas veterinarias mencionan morfo o genética (ej: GIANT, SUPER GIANT, RAPTOR, SNOW, PIED, SUPER, HET, etc.), AJUSTA los rangos de peso y cuidados al morfo específico. El rango de peso en "peso.rangoNormal" DEBE reflejar el morfo, no la especie base.\n` +
+      `10) Si las notas veterinarias incluyen rangos de peso proporcionados por un profesional, ESOS RANGOS tienen prioridad sobre los rangos genéricos de la especie.\n\n` +
       `Responde ÚNICAMENTE con JSON (sin markdown, sin texto extra):\n` +
       `{\n` +
       `  "nombreCientifico": "nombre científico latino de la especie",\n` +
+      `  "confianzaEspecie": "alta|media|baja",\n` +
+      `  "etapaVidaTomada": "cria|juvenil|adulto|senior|desconocida",\n` +
       `  "resumen": "descripción breve de la especie en 1-2 oraciones",\n` +
       `  "alimentacion": {\n` +
-      `    "frecuencia": "cada cuánto debe comer",\n` +
-      `    "alimentos": ["alimento1", "alimento2", "alimento3"],\n` +
-      `    "evitar": ["alimento peligroso 1", "alimento peligroso 2"]\n` +
+      `    "frecuencia": "cada cuánto debe comer según su etapa de vida",\n` +
+      `    "alimentos": ["alimento en español — proporción o cantidad recomendada"],\n` +
+      `    "evitar": ["alimento peligroso en español — razón breve"]\n` +
       `  },\n` +
       `  "peso": {\n` +
       `    "rangoNormal": "rango saludable (ej: 40-60 g)",\n` +
@@ -165,9 +270,12 @@ router.get("/cuidados", requireAuth, async (req: Request, res: Response) => {
       const cuidados = parsearRespuestaIA(respuesta) as Record<string, unknown>;
       const nombreCientifico =
         typeof cuidados.nombreCientifico === "string" ? cuidados.nombreCientifico : null;
-      await storage.guardarCuidadosEspecie(
+      await storage.guardarCuidadosMascota(
+        mascotaId,
         mascota.especie,
         mascota.categoria,
+        mascota.genero,
+        edadAproximada,
         cuidados,
         nombreCientifico
       );
@@ -196,17 +304,79 @@ router.get("/cuidados", requireAuth, async (req: Request, res: Response) => {
  */
 router.post("/analizar", requireAuth, async (req: Request, res: Response) => {
   try {
+    const mascotaId = normalizarMascotaId(req.params);
+    if (!mascotaId) return res.status(400).json({ message: "mascotaId inválido" });
+
     const mascota = await storage.obtenerMascotaPorId(
-      req.params.mascotaId,
+      mascotaId,
       req.session.perfilId!
     );
     if (!mascota) return res.status(404).json({ message: "Mascota no encontrada" });
+    const edad = calcularEdadMascota(mascota.fechaNacimiento);
 
-    // Obtener datos históricos en paralelo para optimizar latencia
-    const [pesos, alimentacion] = await Promise.all([
-      storage.obtenerPesosPorMascota(req.params.mascotaId),
-      storage.obtenerAlimentacionPorMascota(req.params.mascotaId),
+    // Obtener datos históricos y cuidados de referencia en paralelo
+    // Obtener datos históricos en paralelo
+    const [pesos, alimentacion, salud, cacheFecha] = await Promise.all([
+      storage.obtenerPesosPorMascota(mascotaId),
+      storage.obtenerAlimentacionPorMascota(mascotaId),
+      storage.obtenerSaludPorMascota(mascotaId),
+      storage.obtenerFechaCuidadosMascota(mascotaId),
     ]);
+
+    // Verificar si los cuidados necesitan regenerarse (notas de salud más recientes que el caché)
+    const tieneNotasNuevas = cacheFecha && salud.length > 0 && salud.some(
+      (n) => new Date(n.fecha).getTime() > cacheFecha.getTime()
+    );
+    // Obtener cuidados de referencia, regenerando si hay notas más recientes
+    let cuidadosRef = tieneNotasNuevas ? null : await storage.obtenerCuidadosPorMascota(mascotaId);
+    if (!cuidadosRef) {
+      // Auto-regenerar cuidados con datos actualizados (notas de salud incluidas)
+      try {
+        const edadAprox = obtenerRangoEdadAproximada(edad.edadMeses);
+        const contextoSaludCuidados = salud.length > 0
+          ? salud
+              .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+              .slice(0, 10)
+              .map((n) => `  · [${n.tipo}] ${n.fecha} — ${n.titulo}: ${n.descripcion}`)
+              .join("\n")
+          : "";
+        const promptCuidados =
+          `Eres veterinario especializado en mascotas exóticas y taxonomía animal.\n` +
+          `Tu prioridad es precisión de especie y evitar inventar datos.\n` +
+          `- Nombre: ${mascota.nombre}\n` +
+          `- Especie: ${mascota.especie}\n` +
+          `- Categoría: ${mascota.categoria}\n` +
+          `- Género: ${mascota.genero}\n` +
+          `- Fecha nacimiento: ${mascota.fechaNacimiento}\n` +
+          `- Edad aproximada (rango): ${edadAprox}\n` +
+          `- Edad estimada: ${edad.edadMeses ?? "desconocida"} meses (${edad.edadDias ?? "desconocida"} días)\n` +
+          `- Etapa de vida: ${edad.etapaVida}\n` +
+          `- Notas del dueño: ${mascota.notas?.trim() || "Sin notas"}\n` +
+          (contextoSaludCuidados
+            ? `\nHistorial de salud (notas veterinarias recientes):\n${contextoSaludCuidados}\n\n`
+            : "\n") +
+          `Reglas estrictas:\n` +
+          `1) No inventes nombres científicos ni rangos fisiológicos.\n` +
+          `2) Ajusta recomendaciones al tipo real de animal según categoría, especie y etapa de vida.\n` +
+          `3) TODOS los textos en español. Alimentos con proporción recomendada.\n` +
+          `4) Solo recomienda alimentos de la dieta real de la especie.\n` +
+          `5) Si las notas del dueño o veterinarias mencionan morfo/genética, AJUSTA los rangos de peso al morfo específico.\n` +
+          `6) Si las notas veterinarias incluyen rangos de peso de un profesional, ESOS RANGOS tienen prioridad.\n\n` +
+          `Responde ÚNICAMENTE con JSON:\n` +
+          `{"nombreCientifico":"","confianzaEspecie":"alta|media|baja","etapaVidaTomada":"","resumen":"","alimentacion":{"frecuencia":"","alimentos":[""],"evitar":[""]},"peso":{"rangoNormal":"","alertaBajo":0,"alertaAlto":0},"salud":{"checkupFrecuencia":"","signosAlerta":[""]},"cuidados":[""]}`;
+        const respCuidados = await consultarGroq(promptCuidados);
+        const cuidadosParsed = parsearRespuestaIA(respCuidados) as Record<string, unknown>;
+        const nombreCientifico =
+          typeof cuidadosParsed.nombreCientifico === "string" ? cuidadosParsed.nombreCientifico : null;
+        await storage.guardarCuidadosMascota(
+          mascotaId, mascota.especie, mascota.categoria, mascota.genero,
+          edadAprox, cuidadosParsed, nombreCientifico
+        );
+        cuidadosRef = cuidadosParsed;
+      } catch (errCuidados) {
+        console.warn("No se pudieron regenerar cuidados durante análisis:", errCuidados);
+      }
+    }
 
     // PASO 1 — Regresión Lineal (Módulo 2.2)
     const pesosOrdenados = [...pesos].sort(
@@ -225,18 +395,65 @@ router.post("/analizar", requireAuth, async (req: Request, res: Response) => {
         `- Predicción próximos 7 días: ${regresion.prediccionProximoPeso} g`
       : "- Tendencia de peso: insuficientes datos para calcular regresión";
 
+    // Construir contexto de referencia desde cuidados cacheados (si existen)
+    let contextoCuidados = "";
+    if (cuidadosRef) {
+      const c = cuidadosRef as Record<string, any>;
+      const partes: string[] = [];
+      if (c.peso?.rangoNormal) partes.push(`- Rango de peso saludable para la especie: ${c.peso.rangoNormal}`);
+      if (c.peso?.alertaBajo) partes.push(`- Peso crítico bajo: ${c.peso.alertaBajo} g`);
+      if (c.peso?.alertaAlto) partes.push(`- Peso crítico alto: ${c.peso.alertaAlto} g`);
+      if (c.alimentacion?.frecuencia) partes.push(`- Frecuencia de alimentación recomendada: ${c.alimentacion.frecuencia}`);
+      if (Array.isArray(c.alimentacion?.alimentos) && c.alimentacion.alimentos.length > 0) {
+        partes.push(`- Alimentos recomendados: ${c.alimentacion.alimentos.join(", ")}`);
+      }
+      if (Array.isArray(c.alimentacion?.evitar) && c.alimentacion.evitar.length > 0) {
+        partes.push(`- Alimentos a evitar: ${c.alimentacion.evitar.join(", ")}`);
+      }
+      if (c.salud?.checkupFrecuencia) partes.push(`- Frecuencia de chequeo veterinario: ${c.salud.checkupFrecuencia}`);
+      if (partes.length > 0) {
+        contextoCuidados = `\nParámetros de referencia para ${mascota.nombre} (${mascota.especie}):\n${partes.join("\n")}\n`;
+      }
+    }
+
     const prompt =
-      `Analiza el estado de salud de esta mascota con los datos proporcionados.\n\n` +
+      `Analiza el estado de salud de esta mascota comparando sus datos reales contra los parámetros de referencia de su especie.\n\n` +
       `Mascota:\n` +
       `- Nombre: ${mascota.nombre}\n` +
       `- Especie: ${mascota.especie}\n` +
-      `- Categoría: ${mascota.categoria}\n\n` +
+      `- Categoría: ${mascota.categoria}\n` +
+      `- Género: ${mascota.genero}\n` +
+      `- Fecha nacimiento: ${mascota.fechaNacimiento}\n` +
+      `- Edad estimada: ${edad.edadMeses ?? "desconocida"} meses (${edad.edadDias ?? "desconocida"} días)\n` +
+      `- Etapa de vida: ${edad.etapaVida}\n` +
+      `- Notas del dueño: ${mascota.notas?.trim() || "Sin notas"}\n\n` +
       `Métricas calculadas:\n` +
       `- Peso actual: ${ultimoPeso ? `${ultimoPeso.peso} ${ultimoPeso.unidad} (${ultimoPeso.fecha})` : "Sin registros"}\n` +
       `${contextoRegresion}\n` +
       `- Registros alimentación últimos 7 días: ${statsAlim.registrosUltimos7Dias} en ${statsAlim.diasConAlimentoSemana} días distintos\n` +
       `- Registros alimentación últimos 30 días: ${statsAlim.registrosUltimos30Dias}\n` +
-      `- Días sin registro de alimentación: ${statsAlim.diasSinRegistroAlimento}\n\n` +
+      `- Días sin registro de alimentación: ${statsAlim.diasSinRegistroAlimento}\n` +
+      // Notas de salud recientes (últimas 10)
+      (() => {
+        if (salud.length === 0) return `\nHistorial de salud: Sin notas registradas.\n`;
+        const recientes = salud
+          .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+          .slice(0, 10);
+        const lineas = recientes.map(
+          (n) => `  · [${n.tipo}] ${n.fecha} — ${n.titulo}: ${n.descripcion}`
+        );
+        return `\nHistorial de salud (últimas ${recientes.length} notas):\n${lineas.join("\n")}\n`;
+      })() +
+      `${contextoCuidados}\n` +
+      `Reglas obligatorias:\n` +
+      `- Compara el peso actual contra el rango de referencia de la especie. Si está fuera del rango, genera alerta.\n` +
+      `- Compara la frecuencia de alimentación registrada contra la frecuencia recomendada.\n` +
+      `- Considera las notas de salud: medicamentos activos, visitas veterinarias recientes y observaciones.\n` +
+      `- Si las notas del dueño mencionan morfo/genética (ej: GIANT, RAPTOR, SNOW, PIED), ajusta los rangos de peso y cuidados al morfo específico.\n` +
+      `- Evalúa todo según la edad/etapa de vida indicada y el género.\n` +
+      `- Si no hay parámetros de referencia, usa tu conocimiento veterinario de la especie.\n` +
+      `- Si falta edad válida, indícalo explícitamente en alertas con nivel info.\n` +
+      `- Responde siempre en español.\n\n` +
       `Responde ÚNICAMENTE con JSON (sin markdown, sin texto extra):\n` +
       `{\n` +
       `  "alertas": [\n` +
@@ -262,7 +479,7 @@ router.post("/analizar", requireAuth, async (req: Request, res: Response) => {
 
       // PASO 4 — Persistir en BD (historial clínico)
       const guardado = await storage.guardarAnalisis({
-        mascotaId: req.params.mascotaId,
+        mascotaId,
         alertas,
         resumenSalud,
         puntuacion,

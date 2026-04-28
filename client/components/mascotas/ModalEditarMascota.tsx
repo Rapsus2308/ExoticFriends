@@ -16,9 +16,10 @@ import Colors from '@/constants/colors';
 import ModalFormulario from '@/components/ModalFormulario';
 import CampoTexto from '@/components/CampoTexto';
 import SelectorCategoria from '@/components/SelectorCategoria';
+import SelectorGenero from '@/components/SelectorGenero';
 import SelectorFecha from '@/components/SelectorFecha';
 import BotonAccion from '@/components/BotonAccion';
-import { Mascota, CategoriaMascota } from '@/lib/tipos';
+import { Mascota, CategoriaMascota, GeneroMascota } from '@/lib/tipos';
 import { convertirImagenABase64 } from '@/lib/imagenBase64';
 import { apiRequest } from '@/lib/query-client';
 
@@ -29,10 +30,18 @@ interface Props {
   alGuardar: () => void;
 }
 
+function normalizarGenero(valor: unknown): GeneroMascota {
+  if (typeof valor !== 'string') return 'desconocido';
+  const v = valor.trim().toLowerCase();
+  if (v === 'macho' || v === 'hembra' || v === 'desconocido') return v;
+  return 'desconocido';
+}
+
 export default function ModalEditarMascota({ visible, mascota, alCerrar, alGuardar }: Props) {
   const [nombre, setNombre] = useState('');
   const [especie, setEspecie] = useState('');
   const [categoria, setCategoria] = useState<CategoriaMascota | null>(null);
+  const [genero, setGenero] = useState<GeneroMascota | null>(null);
   const [fecha, setFecha] = useState<Date | null>(null);
   const [notas, setNotas] = useState('');
   const [fotoBase64, setFotoBase64] = useState<string | undefined>();
@@ -43,6 +52,7 @@ export default function ModalEditarMascota({ visible, mascota, alCerrar, alGuard
       setNombre(mascota.nombre);
       setEspecie(mascota.especie);
       setCategoria(mascota.categoria);
+      setGenero(normalizarGenero(mascota.genero));
       setFecha(new Date(mascota.fechaNacimiento));
       setNotas(mascota.notas ?? '');
       setFotoBase64(mascota.fotoBase64);
@@ -77,18 +87,24 @@ export default function ModalEditarMascota({ visible, mascota, alCerrar, alGuard
   const guardar = async () => {
     if (!mascota || !nombre.trim() || !especie.trim() || !categoria || !fecha) return;
     setGuardando(true);
-    await apiRequest('PUT', `/api/mascotas/${mascota.id}`, {
-      nombre: nombre.trim(),
-      especie: especie.trim(),
-      categoria,
-      fechaNacimiento: fecha.toISOString(),
-      notas: notas.trim() || undefined,
-      fotoBase64,
-    });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setGuardando(false);
-    alCerrar();
-    alGuardar();
+    try {
+      await apiRequest('PUT', `/api/mascotas/${mascota.id}`, {
+        nombre: nombre.trim(),
+        especie: especie.trim(),
+        categoria,
+        genero: normalizarGenero(genero),
+        fechaNacimiento: fecha.toISOString(),
+        notas: notas.trim() || undefined,
+        fotoBase64,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      alCerrar();
+      alGuardar();
+    } catch (e) {
+      console.log('Error guardando mascota:', e);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -133,6 +149,7 @@ export default function ModalEditarMascota({ visible, mascota, alCerrar, alGuard
         icono={<Feather name="search" size={18} color={Colors.colores.textoTerciario} />}
       />
       <SelectorCategoria seleccionada={categoria} alSeleccionar={setCategoria} />
+      <SelectorGenero seleccionado={genero} alSeleccionar={setGenero} />
       <SelectorFecha etiqueta="Fecha de nacimiento" valor={fecha} alCambiar={setFecha} />
       <CampoTexto
         etiqueta="Notas (opcional)"

@@ -14,29 +14,43 @@ import { requireAuth } from "../middleware/auth";
 
 const router = Router({ mergeParams: true });
 
+function normalizarMascotaId(params: Request["params"]): string | null {
+  const raw = params.mascotaId;
+  const mascotaId = Array.isArray(raw) ? raw[0] : raw;
+  return typeof mascotaId === "string" && mascotaId.trim().length > 0
+    ? mascotaId
+    : null;
+}
+
 /** GET /api/mascotas/:mascotaId/salud — Lista notas de salud */
 router.get("/", requireAuth, async (req: Request, res: Response) => {
+  const mascotaId = normalizarMascotaId(req.params);
+  if (!mascotaId) return res.status(400).json({ message: "mascotaId inválido" });
+
   const mascota = await storage.obtenerMascotaPorId(
-    req.params.mascotaId,
+    mascotaId,
     req.session.perfilId!
   );
   if (!mascota) return res.status(404).json({ message: "Mascota no encontrada" });
-  const notas = await storage.obtenerSaludPorMascota(req.params.mascotaId);
+  const notas = await storage.obtenerSaludPorMascota(mascotaId);
   return res.json(notas);
 });
 
 /** POST /api/mascotas/:mascotaId/salud — Agrega una nota de salud */
 router.post("/", requireAuth, async (req: Request, res: Response) => {
   try {
+    const mascotaId = normalizarMascotaId(req.params);
+    if (!mascotaId) return res.status(400).json({ message: "mascotaId inválido" });
+
     const mascota = await storage.obtenerMascotaPorId(
-      req.params.mascotaId,
+      mascotaId,
       req.session.perfilId!
     );
     if (!mascota) return res.status(404).json({ message: "Mascota no encontrada" });
 
     const datos = crearSaludSchema.parse(req.body);
     const nota = await storage.agregarSalud({
-      mascotaId: req.params.mascotaId,
+      mascotaId,
       titulo: datos.titulo,
       descripcion: datos.descripcion,
       tipo: datos.tipo,

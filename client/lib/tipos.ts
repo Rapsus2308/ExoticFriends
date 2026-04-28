@@ -1,5 +1,6 @@
 /** Categorias de mascotas exoticas soportadas por la app */
 export type CategoriaMascota = 'reptil' | 'ave' | 'pez' | 'mamifero' | 'artropodo' | 'otro';
+export type GeneroMascota = 'macho' | 'hembra' | 'desconocido';
 
 /** Datos principales de una mascota registrada */
 export interface Mascota {
@@ -7,11 +8,18 @@ export interface Mascota {
   nombre: string;
   especie: string;
   categoria: CategoriaMascota;
+  genero: GeneroMascota;
   fechaNacimiento: string;
   fotoBase64?: string;
   notas?: string;
   creadoEn: string;
 }
+
+export const GENEROS: { valor: GeneroMascota; etiqueta: string }[] = [
+  { valor: 'macho', etiqueta: 'Macho' },
+  { valor: 'hembra', etiqueta: 'Hembra' },
+  { valor: 'desconocido', etiqueta: 'Desconocido' },
+];
 
 /** Registro individual de peso de una mascota */
 export interface RegistroPeso {

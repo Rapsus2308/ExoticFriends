@@ -3,7 +3,7 @@
  *
  * Módulo 2 — Sistemas Inteligentes:
  *
- * 2.1.5 / 2.1.6 — Servicio cognitivo externo (Groq Llama 3.1-8b-instant):
+ * 2.1.5 / 2.1.6 — Servicio cognitivo externo (Groq Llama 3.3-70b-versatile):
  *   `consultarGroq` envía un prompt al LLM y devuelve la respuesta en texto.
  *
  * 2.1.7 / 2.1.9 — Sistema experto local (árbol de decisión):
@@ -164,7 +164,7 @@ export function analizarAlimentacion(registros: { fecha: string }[]) {
 /**
  * Cliente HTTP para la API de Groq (Servicio Cognitivo Externo).
  *
- * Modelo: Llama 3.1-8b-instant (Meta — código abierto).
+ * Modelo: Llama 3.3-70b-versatile (Meta — código abierto, 70B parámetros).
  * Temperatura 0.3 — reduce aleatoriedad para respuestas JSON consistentes.
  * Max tokens 1200 — suficiente para el JSON de análisis/cuidados.
  *
@@ -175,9 +175,10 @@ export function analizarAlimentacion(registros: { fecha: string }[]) {
 export async function consultarGroq(prompt: string): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error("GROQ_API_KEY no configurada");
+  const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
   const body = JSON.stringify({
-    model: "llama-3.1-8b-instant",
+    model,
     messages: [
       {
         role: "system",
@@ -211,7 +212,17 @@ export async function consultarGroq(prompt: string): Promise<string> {
         res.on("end", () => {
           try {
             const json = JSON.parse(data);
+            if (res.statusCode && res.statusCode >= 400) {
+              const apiError =
+                json?.error?.message ||
+                json?.message ||
+                `Groq API error (${res.statusCode})`;
+              return reject(new Error(apiError));
+            }
             const content = json.choices?.[0]?.message?.content ?? "";
+            if (!content) {
+              return reject(new Error("Groq devolvió contenido vacío"));
+            }
             resolve(content);
           } catch {
             reject(new Error("Respuesta inválida de Groq"));

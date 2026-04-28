@@ -7,11 +7,12 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { CategoriaMascota } from '@/lib/tipos';
+import { CategoriaMascota, GeneroMascota } from '@/lib/tipos';
 import { apiRequest } from '@/lib/query-client';
 import { convertirImagenABase64 } from '@/lib/imagenBase64';
 import CampoTexto from '@/components/CampoTexto';
 import SelectorCategoria from '@/components/SelectorCategoria';
+import SelectorGenero from '@/components/SelectorGenero';
 import SelectorFecha from '@/components/SelectorFecha';
 import BotonAccion from '@/components/BotonAccion';
 
@@ -20,6 +21,7 @@ export default function PantallaAgregarMascota() {
   const [nombre, setNombre] = useState('');
   const [especie, setEspecie] = useState('');
   const [categoria, setCategoria] = useState<CategoriaMascota | null>(null);
+  const [genero, setGenero] = useState<GeneroMascota | null>(null);
   const [fechaNacimiento, setFechaNacimiento] = useState<Date | null>(null);
   const [notas, setNotas] = useState('');
   const [fotoBase64, setFotoBase64] = useState<string | undefined>();
@@ -56,6 +58,7 @@ export default function PantallaAgregarMascota() {
     if (!nombre.trim()) nuevosErrores.nombre = 'El nombre es requerido';
     if (!especie.trim()) nuevosErrores.especie = 'La especie es requerida';
     if (!categoria) nuevosErrores.categoria = 'Selecciona una categoría';
+    if (!genero) nuevosErrores.genero = 'Selecciona un género';
     if (!fechaNacimiento) nuevosErrores.fechaNacimiento = 'La fecha es requerida';
     setErrores(nuevosErrores);
     return Object.keys(nuevosErrores).length === 0;
@@ -69,6 +72,7 @@ export default function PantallaAgregarMascota() {
       nombre: nombre.trim(),
       especie: especie.trim(),
       categoria: categoria!,
+      genero: genero!,
       fechaNacimiento: fechaNacimiento!.toISOString(),
       fotoBase64,
       notas: notas.trim() || undefined,
@@ -133,6 +137,9 @@ export default function PantallaAgregarMascota() {
 
           <SelectorCategoria seleccionada={categoria} alSeleccionar={setCategoria} />
           {errores.categoria ? <Text style={estilos.errorCategoria}>{errores.categoria}</Text> : null}
+
+          <SelectorGenero seleccionado={genero} alSeleccionar={setGenero} />
+          {errores.genero ? <Text style={estilos.errorCategoria}>{errores.genero}</Text> : null}
 
           <SelectorFecha
             etiqueta="Fecha de nacimiento (estimada)"

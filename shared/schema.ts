@@ -1,7 +1,14 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, real, timestamp, json, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+/** Tabla de sesiones de express-session (connect-pg-simple) */
+export const session = pgTable("session", {
+  sid: varchar("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire").notNull(),
+});
 
 /** Tabla de perfiles de usuario */
 export const perfiles = pgTable("perfiles", {
@@ -21,6 +28,7 @@ export const mascotas = pgTable("mascotas", {
   nombre: text("nombre").notNull(),
   especie: text("especie").notNull(),
   categoria: text("categoria").notNull(),
+  genero: text("genero").notNull().default("desconocido"),
   fechaNacimiento: text("fecha_nacimiento").notNull(),
   fotoBase64: text("foto_base64"),
   notas: text("notas"),
@@ -57,30 +65,42 @@ export const notasSalud = pgTable("notas_salud", {
 });
 
 /**
- * Tabla de cuidados de especie generados por el servicio cognitivo Groq.
+ * Tabla de cuidados generados por el servicio cognitivo Groq.
  *
- * Indexada por `especie` (nombre científico/común de la especie) de forma
- * única. De este modo, si el usuario tiene varias mascotas de la misma
- * especie, la guía de cuidados se genera UNA SOLA VEZ y se reutiliza.
- *
- * Esto evita llamadas repetidas al servicio cognitivo y reduce latencia.
+ * Indexada por `mascotaId` de forma única. Cada mascota tiene su propia
+ * guía de cuidados personalizada, considerando especie, género, edad
+ * y notas del dueño (morfo/genética como GIANT, RAPTOR, SNOW, PIED, etc.).
  */
-export const cuidadosEspecie = pgTable("cuidados_especie", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  /** Nombre común de la especie — clave única (ej: "gecko leopardo") */
-  especie: text("especie").notNull().unique(),
-  /** Nombre científico (ej: "Eublepharis macularius") — también único, nullable */
-  nombreCientifico: text("nombre_cientifico"),
-  /** Categoría de la mascota (reptil, ave, pez, mamifero, artropodo) */
-  categoria: text("categoria").notNull(),
-  /** JSON serializado de CuidadosEspecie */
-  datos: text("datos").notNull(),
-  /**
-   * Fecha de última generación. Se usa para determinar si el caché
-   * está vigente (< 15 días) o debe refrescarse consultando Groq.
-   */
-  fechaGeneracion: timestamp("fecha_generacion").defaultNow().notNull(),
-});
+export const cuidadosEspecie = pgTable(
+  "cuidados_especie",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    /** ID de la mascota dueña de estos cuidados */
+    mascotaId: varchar("mascota_id").notNull().references(() => mascotas.id, { onDelete: "cascade" }),
+    /** Nombre común de la especie (ej: "gecko leopardo") */
+    especie: text("especie").notNull(),
+    /** Nombre científico (ej: "Eublepharis macularius") */
+    nombreCientifico: text("nombre_cientifico"),
+    /** Categoría de la mascota (reptil, ave, pez, mamifero, artropodo) */
+    categoria: text("categoria").notNull(),
+    /** Género de referencia para ajustar recomendaciones */
+    genero: text("genero").notNull().default("desconocido"),
+    /** Rango de edad para ajustar recomendaciones (ej: "1 año", "2 años", ">5 años") */
+    edadAproximada: text("edad_aproximada").notNull().default("desconocida"),
+    /** JSON serializado de CuidadosEspecie */
+    datos: text("datos").notNull(),
+    /**
+     * Fecha de última generación. Se usa para determinar si el caché
+     * está vigente (< 15 días) o debe refrescarse consultando Groq.
+     */
+    fechaGeneracion: timestamp("fecha_generacion").defaultNow().notNull(),
+  },
+  (table) => ({
+    mascotaIdUnique: uniqueIndex("cuidados_especie_mascota_id_uidx").on(
+      table.mascotaId
+    ),
+  })
+);
 
 /**
  * Tabla de análisis IA generados para una mascota.
@@ -147,6 +167,9 @@ export const crearMascotaSchema = z.object({
   especie: z.string().min(1, "La especie es requerida").max(100),
   categoria: z.enum(["reptil", "ave", "pez", "mamifero", "artropodo", "otro"], {
     errorMap: () => ({ message: "Categoría inválida" }),
+  }),
+  genero: z.enum(["macho", "hembra", "desconocido"], {
+    errorMap: () => ({ message: "Género inválido" }),
   }),
   fechaNacimiento: z.string().min(1, "La fecha de nacimiento es requerida"),
   fotoBase64: z.string().optional().nullable(),
