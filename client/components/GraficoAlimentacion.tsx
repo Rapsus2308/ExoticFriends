@@ -12,7 +12,7 @@
  */
 
 import { StyleSheet, Text, View } from 'react-native';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Svg, { Rect, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { RegistroAlimentacion, formatearFecha } from '@/lib/tipos';
 import Colors from '@/constants/colors';
@@ -33,6 +33,8 @@ export default function GraficoAlimentacion({ registros }: PropsGraficoAlimentac
    * Construye un mapa de fecha → cantidad de alimentaciones para los últimos 14 días.
    * Agrupa por la fecha local (YYYY-MM-DD) para evitar desfases de zona horaria.
    */
+  const [containerWidth, setContainerWidth] = useState(300);
+
   const datos = useMemo(() => {
     const hoy = new Date();
     const dias: { fecha: Date; etiqueta: string; cantidad: number }[] = [];
@@ -83,7 +85,7 @@ export default function GraficoAlimentacion({ registros }: PropsGraficoAlimentac
   }
 
   // Dimensiones del SVG
-  const chartW = 300;
+  const chartW = containerWidth;
   const chartH = 110;
   const padL = 28;
   const padR = 8;
@@ -122,8 +124,8 @@ export default function GraficoAlimentacion({ registros }: PropsGraficoAlimentac
       </View>
 
       {/* Gráfico de barras SVG */}
-      <View style={estilos.graficoContenedor}>
-        <Svg width="100%" height={chartH} viewBox={`0 0 ${chartW} ${chartH}`}>
+      <View style={estilos.graficoContenedor} onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}>
+        <Svg width={containerWidth} height={chartH}>
           <Defs>
             <LinearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor={Colors.colores.acento} stopOpacity="1" />

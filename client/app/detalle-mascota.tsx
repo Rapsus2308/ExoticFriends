@@ -13,7 +13,7 @@
 import { useCallback, useState } from 'react';
 import {
   StyleSheet, Text, View, ScrollView,
-  RefreshControl, Alert, Pressable, Platform,
+  RefreshControl, Alert, Pressable, Platform, useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
@@ -44,6 +44,8 @@ import ModalSalud from '@/components/mascotas/ModalSalud';
 export default function PantallaDetalleMascota() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const esTablet = width >= 768;
 
   const [mascota, setMascota] = useState<Mascota | null>(null);
   const [pesos, setPesos] = useState<TipoRegistroPeso[]>([]);
@@ -148,6 +150,7 @@ export default function PantallaDetalleMascota() {
         showsVerticalScrollIndicator={false}
       >
         {/* Perfil de la mascota */}
+        <View style={esTablet ? estilos.contenidoTablet : undefined}>
         <PerfilMascota mascota={mascota} alPresionar={() => setModalEditar(true)} />
 
         {/* Notas generales */}
@@ -194,6 +197,7 @@ export default function PantallaDetalleMascota() {
           alAgregar={() => setModalSalud(true)}
           alActualizar={cargarDatos}
         />
+        </View>
       </ScrollView>
 
       {/* Modales */}
@@ -251,6 +255,11 @@ const estilos = StyleSheet.create({
   notasTexto: {
     fontSize: 13, fontFamily: 'Nunito_400Regular',
     color: Colors.colores.primarioClaro, lineHeight: 20,
+  },
+  contenidoTablet: {
+    maxWidth: 720,
+    alignSelf: 'center',
+    width: '100%',
   },
   seccion: { paddingHorizontal: 16, marginBottom: 8 },
 });

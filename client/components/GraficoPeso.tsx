@@ -17,6 +17,7 @@ function formatearFechaCorta(fecha: string): string {
 
 export default function GraficoPeso({ registros }: PropsGraficoPeso) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [containerWidth, setContainerWidth] = useState(300);
 
   if (registros.length === 0) {
     return (
@@ -46,7 +47,7 @@ export default function GraficoPeso({ registros }: PropsGraficoPeso) {
   const porcentajeCambio = penultimoPeso ? ((diferencia / penultimoPeso.peso) * 100).toFixed(1) : '0';
   const subio = diferencia >= 0;
 
-  const chartW = 300;
+  const chartW = containerWidth;
   const chartH = 140;
   const padL = 40;
   const padR = 16;
@@ -137,8 +138,8 @@ export default function GraficoPeso({ registros }: PropsGraficoPeso) {
         ) : null}
       </View>
 
-      <View style={estilos.graficoContenedor}>
-        <Svg width="100%" height={chartH} viewBox={`0 0 ${chartW} ${chartH}`}>
+      <View style={estilos.graficoContenedor} onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}>
+        <Svg width={containerWidth} height={chartH}>
           <Defs>
             <LinearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor={Colors.colores.primario} stopOpacity="0.25" />

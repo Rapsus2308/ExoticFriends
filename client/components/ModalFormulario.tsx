@@ -20,6 +20,7 @@ export default function ModalFormulario({ visible, titulo, alCerrar, children }:
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent presentationStyle="overFullScreen">
       <View style={estilos.overlay}>
+        {/* Fondo siempre cubre toda la pantalla con absoluteFill */}
         <Pressable style={estilos.fondo} onPress={alCerrar} />
         <View
           style={[
@@ -57,23 +58,23 @@ const estilos = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   fondo: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   contenedor: {
+    width: '100%',
     backgroundColor: Colors.colores.fondo,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     minHeight: 200,
   },
   contenedorTablet: {
-    maxWidth: 560,
-    alignSelf: 'center',
-    width: '100%',
-    borderRadius: 24,
-    marginBottom: 32,
+    maxWidth: 600,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   tiradorContenedor: {
     alignItems: 'center',
