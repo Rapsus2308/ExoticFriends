@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.exoticfriends",
+      "screenOrientation": "portrait",
       "adaptiveIcon": {
         "backgroundColor": "#0B3D2E",
         "foregroundImage": "./client/assets/images/icon.png"

@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, Modal, Pressable, Platform, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, Modal, Pressable, Platform, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
@@ -11,17 +11,23 @@ interface PropsModalFormulario {
   children: React.ReactNode;
 }
 
-const { height: ALTO_PANTALLA } = Dimensions.get('window');
-
 /** Modal inferior con scroll y soporte de teclado para formularios */
 export default function ModalFormulario({ visible, titulo, alCerrar, children }: PropsModalFormulario) {
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const esTablet = width >= 768;
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent presentationStyle="overFullScreen">
       <View style={estilos.overlay}>
         <Pressable style={estilos.fondo} onPress={alCerrar} />
-        <View style={[estilos.contenedor, { paddingBottom: insets.bottom + 16, maxHeight: ALTO_PANTALLA * 0.9 }]}>
+        <View
+          style={[
+            estilos.contenedor,
+            { paddingBottom: insets.bottom + 16, maxHeight: height * 0.9 },
+            esTablet && estilos.contenedorTablet,
+          ]}
+        >
           <View style={estilos.tiradorContenedor}>
             <View style={estilos.tirador} />
           </View>
@@ -36,7 +42,7 @@ export default function ModalFormulario({ visible, titulo, alCerrar, children }:
             contentContainerStyle={estilos.scrollContenido}
             showsVerticalScrollIndicator={true}
             keyboardShouldPersistTaps="handled"
-            bottomOffset={Platform.OS === 'ios' ? 20 : 40}
+            bottomOffset={16}
           >
             {children}
             <View style={{ height: 20 }} />
@@ -61,6 +67,13 @@ const estilos = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     minHeight: 200,
+  },
+  contenedorTablet: {
+    maxWidth: 560,
+    alignSelf: 'center',
+    width: '100%',
+    borderRadius: 24,
+    marginBottom: 32,
   },
   tiradorContenedor: {
     alignItems: 'center',

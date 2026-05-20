@@ -17,7 +17,7 @@ npm run server:dev
 
 ```bash
 # En otra terminal — apunta automáticamente a localhost:5000
-npm run expo:dev
+npm run start
 ```
 
 Abre Expo Go en tu dispositivo y escanea el QR, o usa el simulador Android/iOS.
